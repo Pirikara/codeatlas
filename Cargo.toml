@@ -1,0 +1,51 @@
+[package]
+name = "codeatlas"
+version = "0.1.0"
+edition = "2021"
+description = "Code knowledge graph builder — analyzes source code and builds a knowledge graph of symbols and their relationships"
+license = "MIT"
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Tree-sitter
+tree-sitter = "0.24"
+tree-sitter-ruby = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-typescript = "0.23"
+
+# Storage
+rusqlite = { version = "0.32", features = ["bundled", "vtab"] }
+
+# Hashing
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Embedding
+fastembed = "4"
+
+# Parallelism
+rayon = "1"
+
+# System
+libc = "0.2"
+
+# Utilities
+anyhow = "1"
+walkdir = "2"
+chrono = { version = "0.4", features = ["now"] }
+dirs = "5"
+ignore = "0.4"             # .gitignore-aware file walking
+indicatif = "0.17"         # progress bars
+console = "0.15"           # terminal styling
+
+[dev-dependencies]
+serde_json = "1"
+
+[profile.release]
+lto = true
+strip = true

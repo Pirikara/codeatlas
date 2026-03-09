@@ -1,0 +1,7 @@
+/target/
+/codeatlas-mcp/node_modules/
+/codeatlas-mcp/dist/
+.codeatlas/
+/.fastembed_cache/
+/.claude/
+*.local.md
