@@ -1,0 +1,52 @@
+{
+  "description": "TypeScript Web API — Express-like architecture with DI, generics, middleware, barrel exports",
+  "files": 11,
+  "symbols": {
+    "total": 64,
+    "by_kind": {
+      "Function": 10,
+      "Method": 17,
+      "Class": 3,
+      "Interface": 7,
+      "Enum": 1,
+      "Type": 2,
+      "Property": 22,
+      "Constructor": 2
+    }
+  },
+  "relationships": {
+    "total": 134,
+    "by_kind": {
+      "DEFINES": 64,
+      "IMPORTS": 37,
+      "CONTAINS": 17,
+      "CALLS": 14,
+      "EXTENDS": 1,
+      "IMPLEMENTS": 1
+    }
+  },
+  "expected_calls": [
+    { "from": "main", "to": "createApp", "confidence": 0.9 },
+    { "from": "main", "to": "UserRepository", "confidence": 0.9, "note": "new UserRepository()" },
+    { "from": "main", "to": "UserService", "confidence": 0.9, "note": "new UserService()" },
+    { "from": "main", "to": "UserController", "confidence": 0.9, "note": "new UserController()" },
+    { "from": "create", "to": "validateEmail", "confidence": 0.9 },
+    { "from": "create", "to": "generateId", "confidence": 0.9 },
+    { "from": "authMiddleware", "to": "verifyToken", "confidence": 0.9 },
+    { "from": "loggerMiddleware", "to": "formatTimestamp", "confidence": 0.9 }
+  ],
+  "expected_extends": [
+    { "from": "UserService", "to": "BaseService" }
+  ],
+  "expected_implements": [
+    { "from": "UserRepository", "to": "Repository" }
+  ],
+  "known_limitations": [
+    "BaseService is detected as abstract class but 'abstract' keyword is not tracked as metadata",
+    "Generic type parameters (BaseService<User>, Repository<User>) are not tracked as relationships",
+    "Barrel re-export pattern (export { X } from './x') is not tested yet — types/index.ts uses direct definitions",
+    "Arrow function middleware (authMiddleware, loggerMiddleware) detected as Function — correct but name comes from variable, not function",
+    "Return type properties ({ status, data }) detected as Property symbols — over-detection for inline object shapes",
+    "BaseService method calls (this.repository.findById) resolved as same-file self-calls, not cross-class delegation"
+  ]
+}

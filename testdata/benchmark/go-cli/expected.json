@@ -1,0 +1,47 @@
+{
+  "description": "Go CLI tool — multi-package, interfaces, functional options pattern, implicit interface implementation",
+  "files": 7,
+  "symbols": {
+    "total": 31,
+    "by_kind": {
+      "Function": 13,
+      "Method": 3,
+      "Struct": 4,
+      "Interface": 2,
+      "Type": 1,
+      "Property": 8
+    }
+  },
+  "relationships": {
+    "total": 63,
+    "by_kind": {
+      "DEFINES": 31,
+      "CALLS": 15,
+      "CONTAINS": 9,
+      "IMPORTS": 8
+    }
+  },
+  "expected_calls": [
+    { "from": "main", "to": "Execute", "confidence": 0.9 },
+    { "from": "Execute", "to": "Load", "confidence": 0.9 },
+    { "from": "Execute", "to": "WithTimeout", "confidence": 0.9 },
+    { "from": "Execute", "to": "WithVerbose", "confidence": 0.9 },
+    { "from": "Execute", "to": "NewLocalRunner", "confidence": 0.9 },
+    { "from": "Execute", "to": "NewJSONFormatter", "confidence": 0.8, "note": "cross-package, unique-global" },
+    { "from": "Execute", "to": "runCommand", "confidence": 0.9 },
+    { "from": "Execute", "to": "statusCommand", "confidence": 0.9 },
+    { "from": "runCommand", "to": "Run", "confidence": 0.9 },
+    { "from": "runCommand", "to": "Format", "confidence": 0.8 },
+    { "from": "statusCommand", "to": "Status", "confidence": 0.9 },
+    { "from": "statusCommand", "to": "Format", "confidence": 0.8 },
+    { "from": "Run", "to": "executeTarget", "confidence": 0.9 },
+    { "from": "DefaultConfig", "to": "Load", "confidence": 0.9 },
+    { "from": "Format", "to": "marshal", "confidence": 0.9 }
+  ],
+  "known_limitations": [
+    "Implicit interface implementation not detected: LocalRunner implements Runner, JSONFormatter implements Formatter — no IMPLEMENTS relationship",
+    "Go package-level import resolution works (cmd -> internal/config) but relies on unique-global (0.8) for cross-package calls like NewJSONFormatter",
+    "Functional options pattern (Option type + WithXxx functions) detected as individual functions — the pattern itself is not recognized as a relationship",
+    "Embed struct pattern not tested in this fixture"
+  ]
+}

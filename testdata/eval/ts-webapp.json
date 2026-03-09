@@ -1,0 +1,146 @@
+{
+  "fixture": "ts-webapp",
+  "fixture_dir": "../benchmark/ts-webapp",
+  "description": "TypeScript Web API evaluation queries",
+  "queries": [
+    {
+      "id": "ts-01",
+      "query": "UserService",
+      "category": "exact",
+      "relevant": [
+        { "name": "UserService", "file_path": "src/services/user.service.ts", "kind": "Class" }
+      ],
+      "notes": "exact class name — BM25 should rank 1st"
+    },
+    {
+      "id": "ts-02",
+      "query": "UserController",
+      "category": "exact",
+      "relevant": [
+        { "name": "UserController", "file_path": "src/controllers/user.controller.ts", "kind": "Class" }
+      ],
+      "notes": "exact class name"
+    },
+    {
+      "id": "ts-03",
+      "query": "UserRepository",
+      "category": "exact",
+      "relevant": [
+        { "name": "UserRepository", "file_path": "src/repositories/user.repository.ts", "kind": "Class" }
+      ],
+      "notes": "exact class name"
+    },
+    {
+      "id": "ts-04",
+      "query": "authMiddleware",
+      "category": "exact",
+      "relevant": [
+        { "name": "authMiddleware", "file_path": "src/middleware/auth.middleware.ts", "kind": "Function" }
+      ],
+      "notes": "arrow function stored as Function kind"
+    },
+    {
+      "id": "ts-05",
+      "query": "validateEmail",
+      "category": "exact",
+      "relevant": [
+        { "name": "validateEmail", "file_path": "src/utils/validation.ts", "kind": "Function" }
+      ],
+      "notes": "exact function name"
+    },
+    {
+      "id": "ts-06",
+      "query": "generateId",
+      "category": "exact",
+      "relevant": [
+        { "name": "generateId", "file_path": "src/utils/id.ts", "kind": "Function" }
+      ],
+      "notes": "exact function name"
+    },
+    {
+      "id": "ts-07",
+      "query": "createApp",
+      "category": "exact",
+      "relevant": [
+        { "name": "createApp", "file_path": "src/app.ts", "kind": "Function" }
+      ],
+      "notes": "exact function name"
+    },
+    {
+      "id": "ts-08",
+      "query": "loggerMiddleware",
+      "category": "exact",
+      "relevant": [
+        { "name": "loggerMiddleware", "file_path": "src/middleware/logger.middleware.ts", "kind": "Function" }
+      ],
+      "notes": "arrow function stored as Function kind"
+    },
+    {
+      "id": "ts-09",
+      "query": "HTTP status codes enum",
+      "category": "semantic",
+      "relevant": [
+        { "name": "HttpStatus", "file_path": "src/types/index.ts", "kind": "Enum" }
+      ],
+      "notes": "semantic — describes enum of HTTP status codes"
+    },
+    {
+      "id": "ts-10",
+      "query": "token verification authentication",
+      "category": "semantic",
+      "relevant": [
+        { "name": "verifyToken", "file_path": "src/middleware/auth.middleware.ts", "kind": "Function" },
+        { "name": "authMiddleware", "file_path": "src/middleware/auth.middleware.ts", "kind": "Function" }
+      ],
+      "notes": "semantic — auth token verification logic"
+    },
+    {
+      "id": "ts-11",
+      "query": "user creation validation",
+      "category": "semantic",
+      "relevant": [
+        { "name": "create", "file_path": "src/services/user.service.ts", "kind": "Method" },
+        { "name": "validateEmail", "file_path": "src/utils/validation.ts", "kind": "Function" }
+      ],
+      "notes": "semantic — user creation with email validation"
+    },
+    {
+      "id": "ts-12",
+      "query": "request logging middleware",
+      "category": "semantic",
+      "relevant": [
+        { "name": "loggerMiddleware", "file_path": "src/middleware/logger.middleware.ts", "kind": "Function" },
+        { "name": "formatTimestamp", "file_path": "src/middleware/logger.middleware.ts", "kind": "Function" }
+      ],
+      "notes": "semantic — request logger and timestamp formatter"
+    },
+    {
+      "id": "ts-13",
+      "query": "entity base interface",
+      "category": "semantic",
+      "relevant": [
+        { "name": "Entity", "file_path": "src/types/index.ts", "kind": "Interface" }
+      ],
+      "notes": "semantic — base entity interface with id and timestamps"
+    },
+    {
+      "id": "ts-14",
+      "query": "Repository interface",
+      "category": "mixed",
+      "relevant": [
+        { "name": "Repository", "file_path": "src/types/index.ts", "kind": "Interface" },
+        { "name": "UserRepository", "file_path": "src/repositories/user.repository.ts", "kind": "Class" }
+      ],
+      "notes": "mixed — exact word + semantic for concrete implementation"
+    },
+    {
+      "id": "ts-15",
+      "query": "find user by email",
+      "category": "mixed",
+      "relevant": [
+        { "name": "findByEmail", "file_path": "src/services/user.service.ts", "kind": "Method" }
+      ],
+      "notes": "mixed — describes findByEmail method semantically"
+    }
+  ]
+}

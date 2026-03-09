@@ -1,0 +1,99 @@
+{
+  "fixture": "ruby-service",
+  "fixture_dir": "../benchmark/ruby-service",
+  "description": "Ruby service layer evaluation queries",
+  "queries": [
+    {
+      "id": "rb-01",
+      "query": "CreateOrder",
+      "category": "exact",
+      "relevant": [
+        { "name": "CreateOrder", "file_path": "app/services/create_order.rb", "kind": "Class" }
+      ],
+      "notes": "exact class name"
+    },
+    {
+      "id": "rb-02",
+      "query": "SendReceipt",
+      "category": "exact",
+      "relevant": [
+        { "name": "SendReceipt", "file_path": "app/services/send_receipt.rb", "kind": "Class" }
+      ],
+      "notes": "exact class name"
+    },
+    {
+      "id": "rb-03",
+      "query": "UpdateInventory",
+      "category": "exact",
+      "relevant": [
+        { "name": "UpdateInventory", "file_path": "app/services/update_inventory.rb", "kind": "Class" }
+      ],
+      "notes": "exact class name"
+    },
+    {
+      "id": "rb-04",
+      "query": "Trackable",
+      "category": "exact",
+      "relevant": [
+        { "name": "Trackable", "file_path": "app/concerns/trackable.rb", "kind": "Module" }
+      ],
+      "notes": "exact module name"
+    },
+    {
+      "id": "rb-05",
+      "query": "calculate total order items",
+      "category": "semantic",
+      "relevant": [
+        { "name": "calculate_total", "file_path": "app/services/create_order.rb", "kind": "Method" }
+      ],
+      "notes": "semantic — method that sums item prices"
+    },
+    {
+      "id": "rb-06",
+      "query": "notify user after order",
+      "category": "semantic",
+      "relevant": [
+        { "name": "notify_user", "file_path": "app/services/create_order.rb", "kind": "Method" }
+      ],
+      "notes": "semantic — post-order user notification"
+    },
+    {
+      "id": "rb-07",
+      "query": "email receipt delivery",
+      "category": "semantic",
+      "relevant": [
+        { "name": "deliver", "file_path": "app/services/send_receipt.rb", "kind": "Method" },
+        { "name": "format_receipt", "file_path": "app/services/send_receipt.rb", "kind": "Method" }
+      ],
+      "notes": "semantic — receipt formatting and delivery"
+    },
+    {
+      "id": "rb-08",
+      "query": "timestamp tracking mixin",
+      "category": "semantic",
+      "relevant": [
+        { "name": "touch_timestamps", "file_path": "app/concerns/trackable.rb", "kind": "Method" },
+        { "name": "Trackable", "file_path": "app/concerns/trackable.rb", "kind": "Module" }
+      ],
+      "notes": "semantic — mixin concern for created_at/updated_at tracking"
+    },
+    {
+      "id": "rb-09",
+      "query": "Validatable",
+      "category": "mixed",
+      "relevant": [
+        { "name": "Validatable", "file_path": "app/concerns/validatable.rb", "kind": "Module" }
+      ],
+      "notes": "mixed — exact module name with semantic validation context"
+    },
+    {
+      "id": "rb-10",
+      "query": "deduct stock inventory",
+      "category": "mixed",
+      "relevant": [
+        { "name": "deduct_stock", "file_path": "app/services/update_inventory.rb", "kind": "Method" }
+      ],
+      "notes": "mixed — inventory deduction method"
+    }
+  ]
+}

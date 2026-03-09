@@ -1,0 +1,48 @@
+{
+  "description": "Ruby service app — interactor-like pattern, module mixins, concerns (included/class_methods), DSL (validates, attr_*)",
+  "files": 10,
+  "symbols": {
+    "total": 100,
+    "by_kind": {
+      "Class": 7,
+      "Module": 15,
+      "Method": 29,
+      "Constructor": 4,
+      "Property": 9,
+      "Constant": 36
+    }
+  },
+  "relationships": {
+    "total": 143,
+    "by_kind": {
+      "DEFINES": 100,
+      "CALLS": 17,
+      "CONTAINS": 15,
+      "IMPORTS": 9,
+      "EXTENDS": 2
+    }
+  },
+  "expected_extends": [
+    { "from": "User", "to": "Base" },
+    { "from": "Order", "to": "Base" }
+  ],
+  "expected_calls": [
+    { "from": "call (CreateOrder)", "to": "find (User)", "confidence": 0.9 },
+    { "from": "call (CreateOrder)", "to": "calculate_total", "confidence": 0.9 },
+    { "from": "call (CreateOrder)", "to": "notify_user", "confidence": 0.9 },
+    { "from": "call (CreateOrder)", "to": "save (Base)", "confidence": 0.8 },
+    { "from": "call (SendReceipt)", "to": "format_receipt", "confidence": 0.9 },
+    { "from": "call (SendReceipt)", "to": "deliver", "confidence": 0.9 },
+    { "from": "call (UpdateInventory)", "to": "deduct_stock", "confidence": 0.9 },
+    { "from": "valid? (Validatable)", "to": "validated_fields", "confidence": 0.9 }
+  ],
+  "known_limitations": [
+    "Constant over-detection: module/class references in scope resolution (Services::CreateOrder, Concerns::Trackable) are detected as Constant symbols — 36 Constants vs 15 Modules, many are duplicates",
+    "include/extend not detected as relationships: 'include Concerns::Trackable' does not create an IMPORTS or IMPLEMENTS relationship to the module",
+    "Organizer STEPS chain (Services::CreateOrder, Services::UpdateInventory, Services::SendReceipt) not detected as CALLS — array constant references are not resolved",
+    "validates DSL not detected: 'validates :name, :email' is a method call but not resolved to Validatable.validates",
+    "delegate pattern not tested in this fixture",
+    "self.included(base) / base.extend(ClassMethods) pattern recognized as method definitions but the mixin relationship is not captured",
+    "singleton_method (self.call, self.find) correctly detected as Method but 'self.' qualifier is lost in the name"
+  ]
+}

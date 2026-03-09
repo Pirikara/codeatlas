@@ -1,0 +1,102 @@
+{
+  "fixture": "go-cli",
+  "fixture_dir": "../benchmark/go-cli",
+  "description": "Go CLI tool evaluation queries",
+  "queries": [
+    {
+      "id": "go-01",
+      "query": "Execute",
+      "category": "exact",
+      "relevant": [
+        { "name": "Execute", "file_path": "cmd/root.go", "kind": "Function", "in_process": true }
+      ],
+      "notes": "exact function name — entry point; expected in execution process"
+    },
+    {
+      "id": "go-02",
+      "query": "NewLocalRunner",
+      "category": "exact",
+      "relevant": [
+        { "name": "NewLocalRunner", "file_path": "internal/runner/local.go", "kind": "Function" }
+      ],
+      "notes": "exact constructor function name"
+    },
+    {
+      "id": "go-03",
+      "query": "NewJSONFormatter",
+      "category": "exact",
+      "relevant": [
+        { "name": "NewJSONFormatter", "file_path": "internal/output/json.go", "kind": "Function" }
+      ],
+      "notes": "exact constructor function name"
+    },
+    {
+      "id": "go-04",
+      "query": "WithTimeout",
+      "category": "exact",
+      "relevant": [
+        { "name": "WithTimeout", "file_path": "internal/config/config.go", "kind": "Function" }
+      ],
+      "notes": "exact functional option name"
+    },
+    {
+      "id": "go-05",
+      "query": "Load",
+      "category": "exact",
+      "relevant": [
+        { "name": "Load", "file_path": "internal/config/config.go", "kind": "Function" }
+      ],
+      "notes": "exact config loader function"
+    },
+    {
+      "id": "go-06",
+      "query": "format output result",
+      "category": "semantic",
+      "relevant": [
+        { "name": "Format", "file_path": "internal/output/json.go", "kind": "Method" },
+        { "name": "Formatter", "file_path": "internal/output/formatter.go", "kind": "Interface" }
+      ],
+      "notes": "semantic — output formatting interface and implementation"
+    },
+    {
+      "id": "go-07",
+      "query": "verbose timeout configuration",
+      "category": "semantic",
+      "relevant": [
+        { "name": "WithVerbose", "file_path": "internal/config/config.go", "kind": "Function" },
+        { "name": "WithTimeout", "file_path": "internal/config/config.go", "kind": "Function" }
+      ],
+      "notes": "semantic — functional options for config"
+    },
+    {
+      "id": "go-08",
+      "query": "status check runner",
+      "category": "semantic",
+      "relevant": [
+        { "name": "statusCommand", "file_path": "cmd/root.go", "kind": "Function" },
+        { "name": "Status", "file_path": "internal/runner/local.go", "kind": "Method" }
+      ],
+      "notes": "semantic — status check command and runner method"
+    },
+    {
+      "id": "go-09",
+      "query": "Runner interface",
+      "category": "mixed",
+      "relevant": [
+        { "name": "Runner", "file_path": "internal/runner/runner.go", "kind": "Interface" },
+        { "name": "LocalRunner", "file_path": "internal/runner/local.go", "kind": "Struct" }
+      ],
+      "notes": "mixed — interface and concrete implementation"
+    },
+    {
+      "id": "go-10",
+      "query": "execute target command",
+      "category": "mixed",
+      "relevant": [
+        { "name": "executeTarget", "file_path": "internal/runner/local.go", "kind": "Function" },
+        { "name": "runCommand", "file_path": "cmd/root.go", "kind": "Function" }
+      ],
+      "notes": "mixed — target execution and command runner"
+    }
+  ]
+}
