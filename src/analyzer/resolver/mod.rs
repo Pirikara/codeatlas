@@ -21,6 +21,8 @@ pub struct Relationship {
 pub enum RelationKind {
     Imports,
     Calls,
+    CallsUnresolved,
+    CallsExternal,
     Extends,
     Implements,
     Defines,
@@ -32,6 +34,8 @@ impl std::fmt::Display for RelationKind {
         match self {
             RelationKind::Imports => write!(f, "IMPORTS"),
             RelationKind::Calls => write!(f, "CALLS"),
+            RelationKind::CallsUnresolved => write!(f, "CALLS_UNRESOLVED"),
+            RelationKind::CallsExternal => write!(f, "CALLS_EXTERNAL"),
             RelationKind::Extends => write!(f, "EXTENDS"),
             RelationKind::Implements => write!(f, "IMPLEMENTS"),
             RelationKind::Defines => write!(f, "DEFINES"),

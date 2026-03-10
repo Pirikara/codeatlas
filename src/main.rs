@@ -27,5 +27,6 @@ fn main() -> anyhow::Result<()> {
         Command::Subgraph(args) => cli::subgraph_cmd::run(args, json),
         Command::ImpactBatch(args) => cli::impact_batch_cmd::run(args, json),
         Command::GraphQuery(args) => cli::graph_query_cmd::run(args, json),
+        Command::Dataflow(args) => cli::dataflow_cmd::run(args, json),
     }
 }

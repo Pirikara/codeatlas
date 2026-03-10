@@ -4,9 +4,12 @@ pub mod resolver;
 
 use std::collections::HashMap;
 
+use std::collections::HashSet;
+
 use crate::parser::calls::RawCall;
+use crate::parser::dataflow::RawFlow;
 use crate::parser::imports::RawImport;
-use crate::parser::Symbol;
+use crate::parser::{Symbol, SymbolKind};
 
 pub use community::Community;
 pub use process::Process;
@@ -19,10 +22,13 @@ pub struct FileAnalysis {
     pub symbols: Vec<Symbol>,
     pub imports: Vec<RawImport>,
     pub calls: Vec<RawCall>,
+    pub flows: Vec<RawFlow>,
 }
 
 /// Resolve all cross-file relationships from file analyses.
-pub fn resolve_relationships(analyses: &[FileAnalysis]) -> Vec<Relationship> {
+/// Returns (relationships, external_symbols) — external symbols are pseudo-symbols
+/// for unresolved/external call targets, sorted by UID for determinism.
+pub fn resolve_relationships(analyses: &[FileAnalysis]) -> (Vec<Relationship>, Vec<Symbol>) {
     // Build lookup indexes
     let symbol_index = build_symbol_index(analyses);
     let file_exports = build_file_exports(analyses);
@@ -88,7 +94,50 @@ pub fn resolve_relationships(analyses: &[FileAnalysis]) -> Vec<Relationship> {
     // CONTAINS edges: Folder → File, Folder → Folder
     resolve_contains(analyses, &mut relationships);
 
-    relationships
+    // Collect External pseudo-symbols from CALLS_UNRESOLVED / CALLS_EXTERNAL edges
+    let external_symbols = collect_external_symbols(&relationships);
+
+    (relationships, external_symbols)
+}
+
+/// Collect External pseudo-symbols from unresolved/external call relationships.
+/// Deduplicates by target_uid and sorts by UID for deterministic insertion order.
+fn collect_external_symbols(relationships: &[resolver::Relationship]) -> Vec<Symbol> {
+    let mut seen = HashSet::new();
+    let mut externals = Vec::new();
+
+    for rel in relationships {
+        if (rel.kind == resolver::RelationKind::CallsUnresolved
+            || rel.kind == resolver::RelationKind::CallsExternal)
+            && rel.target_uid.starts_with("External:<external>:")
+        {
+            if seen.insert(rel.target_uid.clone()) {
+                // Extract name from UID: "External:<external>:{name}:0"
+                let name = rel.target_uid
+                    .strip_prefix("External:<external>:")
+                    .and_then(|s| s.strip_suffix(":0"))
+                    .unwrap_or(&rel.target_uid)
+                    .to_string();
+                externals.push(Symbol {
+                    name,
+                    kind: SymbolKind::External,
+                    file_path: "<external>".to_string(),
+                    start_line: 0,
+                    end_line: 0,
+                    is_exported: false,
+                    parent_name: None,
+                    superclass: None,
+                    interfaces: vec![],
+                    type_annotation: None,
+                    param_count: None,
+                });
+            }
+        }
+    }
+
+    // Sort by UID for deterministic insertion order
+    externals.sort_by(|a, b| a.uid().cmp(&b.uid()));
+    externals
 }
 
 /// Build directory hierarchy CONTAINS edges.

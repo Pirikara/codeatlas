@@ -328,6 +328,23 @@ export async function detectChanges(
   return impactBatch(repoPath, { ranges }, direction, depth, minConfidence, callsOnly, maxSymbols, kinds);
 }
 
+/** Show intra-function data flows for a symbol. */
+export async function dataflow(
+  repoPath: string,
+  name?: string,
+  uid?: string,
+  file?: string,
+): Promise<any> {
+  const args = ['dataflow', '-p', repoPath];
+  if (uid) {
+    args.push('--uid', uid);
+  } else if (name) {
+    args.push(name);
+  }
+  if (file) args.push('--file', file);
+  return run(args);
+}
+
 /** Execute a read-only SQL SELECT query against the knowledge graph. */
 export async function graphQuery(
   repoPath: string,

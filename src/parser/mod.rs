@@ -1,5 +1,6 @@
 pub mod extract;
 pub mod calls;
+pub mod dataflow;
 pub mod imports;
 
 use anyhow::{Context, Result};
@@ -65,17 +66,18 @@ impl ParserPool {
         Ok(symbols)
     }
 
-    /// Full parse: extract symbols, imports, and calls.
+    /// Full parse: extract symbols, imports, calls, and data flows.
     pub fn parse_full(
         &mut self,
         language: Language,
         source: &[u8],
-    ) -> Result<(Vec<Symbol>, Vec<imports::RawImport>, Vec<calls::RawCall>)> {
+    ) -> Result<(Vec<Symbol>, Vec<imports::RawImport>, Vec<calls::RawCall>, Vec<dataflow::RawFlow>)> {
         let tree = self.parse_tree(language, source)?;
         let symbols = extract::extract_symbols(language, &tree, source);
         let raw_imports = imports::extract_imports(language, &tree, source);
         let raw_calls = calls::extract_calls(language, &tree, source);
-        Ok((symbols, raw_imports, raw_calls))
+        let raw_flows = dataflow::extract_dataflows(language, &tree, source);
+        Ok((symbols, raw_imports, raw_calls, raw_flows))
     }
 
     fn parse_tree(&mut self, language: Language, source: &[u8]) -> Result<tree_sitter::Tree> {

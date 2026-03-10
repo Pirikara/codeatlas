@@ -23,9 +23,9 @@ npm run build
 cargo test -- --test-threads=1
 ```
 
-As of 2026-03-09:
-- Unit tests: 60 passed
-- Integration tests: 55 passed
+As of 2026-03-10:
+- Unit tests: 74 passed
+- Integration tests: 63 passed
 
 ## Current Directory Layout (Key Parts)
 
@@ -37,6 +37,7 @@ src/
 │   ├── mod.rs
 │   ├── extract/{mod,typescript,go,ruby}.rs
 │   ├── calls/{mod,typescript,go,ruby}.rs
+│   ├── dataflow/{mod,typescript,go,ruby}.rs
 │   └── imports/{mod,typescript,go,ruby}.rs
 ├── analyzer/
 │   ├── mod.rs
@@ -46,7 +47,7 @@ src/
 ├── storage/{mod,read,write}.rs
 ├── embedder/mod.rs
 ├── query/mod.rs
-└── cli/{mod,index,metrics,status,embed_cmd,query_cmd,context_cmd,impact_cmd,subgraph_cmd,graph_query_cmd,impact_batch_cmd,clusters_cmd,processes_cmd,eval_cmd}.rs
+└── cli/{mod,index,metrics,status,embed_cmd,query_cmd,context_cmd,impact_cmd,subgraph_cmd,graph_query_cmd,impact_batch_cmd,clusters_cmd,processes_cmd,eval_cmd,dataflow_cmd}.rs
 
 codeatlas-mcp/
 ├── src/{index,tools,resources,codeatlas}.ts
@@ -61,7 +62,16 @@ codeatlas-mcp/
 - Ruby
 
 ### Relationship Kinds
-`CALLS`, `IMPORTS`, `EXTENDS`, `IMPLEMENTS`, `DEFINES`, `CONTAINS`
+`CALLS`, `CALLS_UNRESOLVED`, `CALLS_EXTERNAL`, `IMPORTS`, `EXTENDS`, `IMPLEMENTS`, `DEFINES`, `CONTAINS`
+
+### CALLS_UNRESOLVED / CALLS_EXTERNAL (P9.1)
+- When `resolve_callee()` finds no match, a fallback creates `CALLS_UNRESOLVED` or `CALLS_EXTERNAL`
+- `CALLS_EXTERNAL`: only when receiver contains `::` (e.g. `ActiveRecord::Base.execute`)
+- All other unresolved calls → `CALLS_UNRESOLVED`
+- External pseudo-symbols: `SymbolKind::External`, `file_path = "<external>"`, `start_line = 0`
+- `confidence = 0.0` → excluded from `impact()` (default `min_confidence = 0.5`) but visible in `context()` outgoing
+- External symbols are deleted and rebuilt on each index run
+- UID format: `External:<external>:{name}:0`
 
 ### Search Modes
 - `bm25` (FTS5)
@@ -103,6 +113,12 @@ codeatlas-mcp/
 - Default kinds are `Function` / `Method` only (`--kinds` / `--all-kinds` available)
 - MCP `detect-changes` runs `git diff` in Node.js and passes ranges to `impact-batch`
 
+### Dataflow (P9.2)
+- `dataflow` CLI + MCP tool: shows intra-function data flows (Assignment, Argument, StringInterp, Return, FieldAccess)
+- `data_flows` table stores flows with `function_uid` reference (nullable for top-level code)
+- Supported: TypeScript, Ruby, Go — raw expression text preserved (no normalization)
+- Data flows are rebuilt from scratch on each index run
+
 ### MCP Multi-repo (P5.5)
 - Successful `codeatlas index` auto-registers repo in `~/.codeatlas/registry.json`
 - Registry path can be overridden by `CODEATLAS_REGISTRY_PATH`
@@ -120,13 +136,14 @@ Main tables:
 - `relationships`
 - `communities`, `community_members`
 - `processes`, `process_steps`
+- `data_flows`
 - `file_index`
 - `symbols_fts` (FTS5)
 - `embeddings`
 
 ## MCP Server
 
-- Tools: `list_repos`, `query`, `context`, `impact`, `subgraph`, `graph-query`, `detect-changes`, `impact-batch`
+- Tools: `list_repos`, `query`, `context`, `impact`, `subgraph`, `graph-query`, `detect-changes`, `impact-batch`, `dataflow`
 - Resource Templates:
   - `codeatlas://repo/{repo}/status`
   - `codeatlas://repo/{repo}/clusters`
@@ -137,5 +154,6 @@ Main tables:
 - Vector search is exact brute-force cosine (ANN deferred; re-evaluate at 100K+ symbols).
 - Embedding model is currently fixed to `all-MiniLM-L6-v2`.
 - Ruby dynamic dispatch supports static `send(:sym)` / `send("str")` extraction.
-- Ruby `method_missing` fallback routes unresolved implicit-self calls at confidence 0.30 (explicit-receiver cases remain unresolved).
-- Dynamic/indirect call resolution in TSX/JSX is limited.
+- Ruby `method_missing` fallback routes unresolved implicit-self calls at confidence 0.30 (explicit-receiver cases become CALLS_UNRESOLVED).
+- Dynamic/indirect call resolution in TSX/JSX is limited (unresolved calls now captured as CALLS_UNRESOLVED).
+- Dataflow extraction is intra-function only; cross-function taint tracking deferred.

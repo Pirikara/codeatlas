@@ -48,6 +48,15 @@ fn fixture_path(name: &str) -> String {
         .to_string()
 }
 
+fn test_fixture_path(name: &str) -> String {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("testdata")
+        .join("fixtures")
+        .join(name)
+        .to_string_lossy()
+        .to_string()
+}
+
 /// Copy a fixture to a temp directory for mutation tests.
 fn tempdir_copy(name: &str) -> std::path::PathBuf {
     let src = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -405,15 +414,54 @@ fn stale_file_cleanup_on_incremental_index() {
         symbols_after
     );
 
-    // Verify deleted file's symbols are gone from query
+    // Verify deleted file's original symbol is gone from query
+    // (it may still appear as an External pseudo-symbol from unresolved calls)
     let results = run_json(&["query", "generateId", "-p", &path, "--json"]);
     let hits = results.as_array().unwrap();
+    let non_external_hits: Vec<_> = hits.iter()
+        .filter(|h| h["symbol"]["kind"].as_str() != Some("External"))
+        .collect();
     assert!(
-        hits.is_empty(),
-        "stale symbol 'generateId' should not appear after cleanup"
+        non_external_hits.is_empty(),
+        "stale symbol 'generateId' (non-External) should not appear after cleanup"
     );
 
     // Cleanup temp dir
+    fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn incremental_index_preserves_relationships() {
+    let tmp = tempdir_copy("ts-webapp");
+    let path = tmp.to_string_lossy().to_string();
+
+    // Full index
+    let (_, success) = run_codeatlas(&["index", "--force", &path]);
+    assert!(success, "initial index failed");
+    let before = run_json(&["status", "--json", &path]);
+    let rels_before = before["relationship_count"].as_u64().unwrap();
+    assert!(rels_before > 50, "should have many relationships after full index");
+
+    // Modify one file to trigger incremental re-index
+    let target = Path::new(&path).join("src").join("services").join("user.service.ts");
+    let mut content = fs::read_to_string(&target).unwrap();
+    content.push_str("\n// incremental change\n");
+    fs::write(&target, content).unwrap();
+
+    let (_, success) = run_codeatlas(&["index", &path]);
+    assert!(success, "incremental index failed");
+
+    let after = run_json(&["status", "--json", &path]);
+    let rels_after = after["relationship_count"].as_u64().unwrap();
+
+    // Relationship count should be within a small delta (not drop to near-zero)
+    let diff = (rels_before as i64 - rels_after as i64).unsigned_abs();
+    assert!(
+        diff <= 5,
+        "incremental index should preserve relationships (before={}, after={}, diff={})",
+        rels_before, rels_after, diff
+    );
+
     fs::remove_dir_all(&tmp).ok();
 }
 
@@ -430,7 +478,7 @@ fn relationships_have_expected_kinds() {
     let result: serde_json::Value = serde_json::from_str(&stdout).unwrap();
 
     assert_eq!(result["status"].as_str(), Some("found"));
-    let valid_kinds = ["CALLS", "IMPORTS", "EXTENDS", "IMPLEMENTS", "DEFINES", "CONTAINS"];
+    let valid_kinds = ["CALLS", "CALLS_UNRESOLVED", "CALLS_EXTERNAL", "IMPORTS", "EXTENDS", "IMPLEMENTS", "DEFINES", "CONTAINS"];
 
     for rel in result["incoming"].as_array().unwrap_or(&vec![]) {
         let kind = rel["kind"].as_str().unwrap();
@@ -1326,4 +1374,172 @@ fn index_metrics_flag_outputs_timing() {
     assert!(stderr.contains("symbol_count"), "metrics should include symbol_count");
     assert!(stderr.contains("parse_failures"), "metrics should include parse_failures");
     assert!(stderr.contains("peak_rss_bytes"), "metrics should include peak_rss_bytes");
+}
+
+// ── P9.1: CALLS_UNRESOLVED / CALLS_EXTERNAL ─────────────────────
+
+#[test]
+fn calls_unresolved_appears_in_context() {
+    let path = test_fixture_path("external-calls");
+    run_codeatlas(&["index", "--force", &path]);
+
+    // handleRequest calls JSON.parse and console.log which are unresolved
+    let json = run_json(&["context", "handleRequest", "-p", &path, "--json"]);
+    assert_eq!(json["status"].as_str(), Some("found"));
+
+    let outgoing = json["outgoing"].as_array().expect("outgoing should be array");
+    let unresolved_kinds: Vec<&str> = outgoing.iter()
+        .filter_map(|r| r["kind"].as_str())
+        .filter(|k| *k == "CALLS_UNRESOLVED" || *k == "CALLS_EXTERNAL")
+        .collect();
+    assert!(
+        !unresolved_kinds.is_empty(),
+        "handleRequest should have CALLS_UNRESOLVED/EXTERNAL outgoing edges, got: {:?}",
+        outgoing
+    );
+}
+
+#[test]
+fn external_symbols_exist_in_graph() {
+    let path = test_fixture_path("external-calls");
+    run_codeatlas(&["index", "--force", &path]);
+
+    let json = run_json(&[
+        "graph-query",
+        "SELECT name FROM symbols WHERE kind='External' ORDER BY name",
+        "-p", &path, "--json",
+    ]);
+    let rows = json.as_array().expect("graph-query result should be array");
+    assert!(
+        !rows.is_empty(),
+        "External symbols should exist in the graph after indexing"
+    );
+}
+
+#[test]
+fn external_symbols_cleaned_on_reindex() {
+    let path = test_fixture_path("external-calls");
+    run_codeatlas(&["index", "--force", &path]);
+
+    let count1 = run_json(&[
+        "graph-query",
+        "SELECT COUNT(*) as cnt FROM symbols WHERE kind='External'",
+        "-p", &path, "--json",
+    ]);
+
+    // Re-index
+    run_codeatlas(&["index", "--force", &path]);
+
+    let count2 = run_json(&[
+        "graph-query",
+        "SELECT COUNT(*) as cnt FROM symbols WHERE kind='External'",
+        "-p", &path, "--json",
+    ]);
+
+    assert_eq!(
+        count1, count2,
+        "External symbol count should be identical across re-indexes"
+    );
+}
+
+#[test]
+fn calls_external_only_for_namespace() {
+    let path = test_fixture_path("external-calls");
+    run_codeatlas(&["index", "--force", &path]);
+
+    let json = run_json(&[
+        "graph-query",
+        "SELECT r.kind, s2.name as target_name FROM relationships r JOIN symbols s2 ON r.target_id=s2.id WHERE r.kind IN ('CALLS_UNRESOLVED','CALLS_EXTERNAL') ORDER BY r.kind, s2.name",
+        "-p", &path, "--json",
+    ]);
+    let rows = json.as_array().expect("graph-query result should be array");
+
+    for row in rows {
+        let kind = row["kind"].as_str().unwrap_or("");
+        let target = row["target_name"].as_str().unwrap_or("");
+        if kind == "CALLS_EXTERNAL" {
+            // CALLS_EXTERNAL targets should have "::" in their name (namespace separator)
+            assert!(
+                target.contains("::"),
+                "CALLS_EXTERNAL target '{}' should contain '::'",
+                target
+            );
+        }
+    }
+
+    // Verify we have at least one CALLS_EXTERNAL (from ActiveRecord::Base)
+    let has_external = rows.iter().any(|r| r["kind"].as_str() == Some("CALLS_EXTERNAL"));
+    assert!(has_external, "Should have at least one CALLS_EXTERNAL relationship from Ruby namespace calls");
+}
+
+// ── P9.2: DATA_FLOWS_TO ─────────────────────────────────────────
+
+#[test]
+fn dataflow_returns_flows_for_ts_function() {
+    let path = test_fixture_path("dataflow");
+    run_codeatlas(&["index", "--force", &path]);
+
+    let json = run_json(&["dataflow", "handleRequest", "-p", &path, "--json"]);
+    assert_eq!(json["symbol"]["name"].as_str(), Some("handleRequest"));
+
+    let flows = json["flows"].as_array().expect("flows should be array");
+    assert!(!flows.is_empty(), "handleRequest should have data flows");
+
+    // Check we have various flow kinds
+    let kinds: Vec<&str> = flows.iter()
+        .filter_map(|f| f["flow_kind"].as_str())
+        .collect();
+    assert!(kinds.contains(&"Assignment"), "should have Assignment flow");
+    assert!(kinds.contains(&"StringInterp"), "should have StringInterp flow");
+    assert!(kinds.contains(&"Return"), "should have Return flow");
+}
+
+#[test]
+fn dataflow_ruby_flows_detected() {
+    let path = test_fixture_path("dataflow");
+    run_codeatlas(&["index", "--force", &path]);
+
+    let json = run_json(&["dataflow", "process", "--file", "src/processor.rb", "-p", &path, "--json"]);
+    assert_eq!(json["symbol"]["name"].as_str(), Some("process"));
+
+    let flows = json["flows"].as_array().expect("flows should be array");
+    assert!(!flows.is_empty(), "process() should have data flows");
+
+    let kinds: Vec<&str> = flows.iter()
+        .filter_map(|f| f["flow_kind"].as_str())
+        .collect();
+    assert!(kinds.contains(&"Assignment"), "should have Assignment flow");
+    assert!(kinds.contains(&"Return"), "should have Return flow");
+}
+
+#[test]
+fn dataflow_go_flows_detected() {
+    let path = test_fixture_path("dataflow");
+    run_codeatlas(&["index", "--force", &path]);
+
+    let json = run_json(&["dataflow", "serve", "-p", &path, "--json"]);
+    assert_eq!(json["symbol"]["name"].as_str(), Some("serve"));
+
+    let flows = json["flows"].as_array().expect("flows should be array");
+    assert!(!flows.is_empty(), "serve() should have data flows");
+
+    let kinds: Vec<&str> = flows.iter()
+        .filter_map(|f| f["flow_kind"].as_str())
+        .collect();
+    assert!(kinds.contains(&"Assignment"), "should have Assignment flow");
+}
+
+#[test]
+fn dataflow_table_populated_after_index() {
+    let path = test_fixture_path("dataflow");
+    run_codeatlas(&["index", "--force", &path]);
+
+    let json = run_json(&[
+        "graph-query",
+        "SELECT COUNT(*) as cnt FROM data_flows",
+        "-p", &path, "--json",
+    ]);
+    let rows = json.as_array().expect("graph-query result should be array");
+    let count = rows[0]["cnt"].as_i64().unwrap_or(0);
+    assert!(count > 0, "data_flows table should have entries after indexing");
 }

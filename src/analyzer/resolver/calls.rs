@@ -19,16 +19,24 @@ pub fn resolve_calls(
         };
 
         let resolved = resolve_callee(file_path, call, file_symbols, symbol_index, imported_files);
-        for (target_uid, confidence, reason) in resolved {
+        for target in resolved {
             relationships.push(Relationship {
                 source_uid: caller_uid.clone(),
-                target_uid,
-                kind: RelationKind::Calls,
-                confidence,
-                reason,
+                target_uid: target.target_uid,
+                kind: target.kind,
+                confidence: target.confidence,
+                reason: target.reason,
             });
         }
     }
+}
+
+/// A resolved callee target with its relationship kind.
+pub struct ResolvedTarget {
+    pub target_uid: String,
+    pub confidence: f64,
+    pub reason: String,
+    pub kind: RelationKind,
 }
 
 /// Find the UID of the calling function.
@@ -68,15 +76,27 @@ fn resolve_caller(file_path: &str, call: &RawCall, file_symbols: &[Symbol]) -> O
     None
 }
 
-/// Resolve the callee — returns list of (target_uid, confidence, reason).
+/// Resolve the callee — returns list of ResolvedTarget.
 fn resolve_callee(
     file_path: &str,
     call: &RawCall,
     file_symbols: &[Symbol],
     symbol_index: &SymbolIndex,
     imported_files: &[String],
-) -> Vec<(String, f64, String)> {
+) -> Vec<ResolvedTarget> {
     let mut results = Vec::new();
+
+    // Helper to create a resolved Calls target
+    macro_rules! resolved {
+        ($uid:expr, $conf:expr, $reason:expr) => {
+            ResolvedTarget {
+                target_uid: $uid,
+                confidence: $conf,
+                reason: $reason,
+                kind: RelationKind::Calls,
+            }
+        };
+    }
 
     // Strategy 1.0: TypeScript this.field.method() resolution via type annotations
     // When receiver is a lowercase field name and we're inside a class method,
@@ -104,10 +124,10 @@ fn resolve_callee(
                                         } else {
                                             0.90
                                         };
-                                        results.push((
+                                        results.push(resolved!(
                                             sym_ref.uid.clone(),
                                             confidence,
-                                            "field-type-annotation".to_string(),
+                                            "field-type-annotation".to_string()
                                         ));
                                     }
                                     if !results.is_empty() {
@@ -140,10 +160,10 @@ fn resolve_callee(
                     } else {
                         0.90
                     };
-                    results.push((
+                    results.push(resolved!(
                         sym_ref.uid.clone(),
                         confidence,
-                        "type-qualified-match".to_string(),
+                        "type-qualified-match".to_string()
                     ));
                 }
                 if !results.is_empty() {
@@ -156,10 +176,10 @@ fn resolve_callee(
             if type_qualified != qualified {
                 if let Some(refs) = symbol_index.get(&type_qualified) {
                     for sym_ref in refs {
-                        results.push((
+                        results.push(resolved!(
                             sym_ref.uid.clone(),
                             0.80,
-                            "receiver-type-inference".to_string(),
+                            "receiver-type-inference".to_string()
                         ));
                     }
                     if !results.is_empty() {
@@ -179,10 +199,10 @@ fn resolve_callee(
                                 .map_or(false, |dir| dir.to_string_lossy() == *recv)
                                 && sym_ref.file_path == *f
                         }) {
-                            results.push((
+                            results.push(resolved!(
                                 sym_ref.uid.clone(),
                                 0.90,
-                                "go-package-match".to_string(),
+                                "go-package-match".to_string()
                             ));
                         }
                     }
@@ -197,7 +217,7 @@ fn resolve_callee(
     // Strategy 2: Same-file name match
     for sym in file_symbols {
         if sym.name == call.callee_name {
-            results.push((sym.uid(), 0.90, "same-file-match".to_string()));
+            results.push(resolved!(sym.uid(), 0.90, "same-file-match".to_string()));
         }
     }
     if !results.is_empty() {
@@ -209,10 +229,10 @@ fn resolve_callee(
         if let Some(refs) = symbol_index.get(&call.callee_name) {
             for sym_ref in refs {
                 if imported_files.contains(&sym_ref.file_path) && sym_ref.is_exported {
-                    results.push((
+                    results.push(resolved!(
                         sym_ref.uid.clone(),
                         0.90,
-                        "imported-file-match".to_string(),
+                        "imported-file-match".to_string()
                     ));
                 }
             }
@@ -226,15 +246,15 @@ fn resolve_callee(
     if let Some(refs) = symbol_index.get(&call.callee_name) {
         let exported: Vec<_> = refs.iter().filter(|r| r.is_exported).collect();
         if exported.len() == 1 {
-            results.push((
+            results.push(resolved!(
                 exported[0].uid.clone(),
                 0.80,
-                "unique-global-match".to_string(),
+                "unique-global-match".to_string()
             ));
         } else if exported.len() >= 2 && exported.len() <= 5 {
             let confidence = 0.50 / exported.len() as f64;
             for r in &exported {
-                results.push((r.uid.clone(), confidence, "ambiguous-global-match".to_string()));
+                results.push(resolved!(r.uid.clone(), confidence, "ambiguous-global-match".to_string()));
             }
         }
     }
@@ -250,11 +270,29 @@ fn resolve_callee(
                 let mm_key = format!("{}.method_missing", caller_class);
                 if let Some(mm_refs) = symbol_index.get(&mm_key) {
                     for r in mm_refs {
-                        results.push((r.uid.clone(), 0.30, "method-missing-fallback".to_string()));
+                        results.push(resolved!(r.uid.clone(), 0.30, "method-missing-fallback".to_string()));
                     }
                 }
             }
         }
+    }
+
+    // Strategy 6: Unresolved fallback — emit CALLS_UNRESOLVED or CALLS_EXTERNAL
+    if results.is_empty() {
+        let name = match &call.receiver {
+            Some(r) => format!("{}.{}", r, call.callee_name),
+            None => call.callee_name.clone(),
+        };
+        // Conservative heuristic: only "::" in receiver → CALLS_EXTERNAL
+        let is_external = call.receiver.as_ref().map_or(false, |r| r.contains("::"));
+        let kind = if is_external { RelationKind::CallsExternal } else { RelationKind::CallsUnresolved };
+        let target_uid = format!("External:<external>:{}:0", name);
+        results.push(ResolvedTarget {
+            target_uid,
+            confidence: 0.0,
+            reason: "unresolved".to_string(),
+            kind,
+        });
     }
 
     results

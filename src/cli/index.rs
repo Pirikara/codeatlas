@@ -121,14 +121,13 @@ pub fn run(args: IndexArgs) -> Result<()> {
     // Phase 4: Determine which files need (re-)indexing.
     // If files were deleted, re-index all remaining files so communities/processes
     // are recomputed with a consistent symbol set.
-    let files_to_index = if args.force || cleaned > 0 {
+    let changed_files = if args.force || cleaned > 0 {
         scan_result.files.clone()
     } else {
         filter_changed_files(&db, &scan_result)?
     };
 
-    let total = files_to_index.len();
-    if total == 0 {
+    if changed_files.is_empty() {
         println!("Index is up to date. Nothing to do.");
         // Still register so registry stays consistent even if index was already current.
         if let Err(e) = register_repo(&path) {
@@ -137,22 +136,29 @@ pub fn run(args: IndexArgs) -> Result<()> {
         return Ok(());
     }
 
+    // For relationship resolution we always need ALL files parsed.
+    // files_to_store: only changed files (for store_symbols).
+    // files_to_parse: all files (for resolve_relationships, communities, processes).
+    let files_to_store = changed_files;
+    let files_to_parse = scan_result.files.clone();
+
     println!(
         "{} file(s) to index (out of {} total)",
-        total,
-        scan_result.files.len()
+        files_to_store.len(),
+        files_to_parse.len()
     );
 
     // Phase 5: Parse files — extract symbols, imports, and calls (parallel via rayon)
     let phase_start = Instant::now();
-    let mut files_to_index = files_to_index;
-    files_to_index.sort_by(|a, b| a.path.cmp(&b.path));
+    let mut files_to_parse = files_to_parse;
+    files_to_parse.sort_by(|a, b| a.path.cmp(&b.path));
 
+    let total = files_to_parse.len();
     let pb = create_progress_bar(total as u64, "Parsing");
     let pb2 = pb.clone();
     let parse_failures = std::sync::atomic::AtomicUsize::new(0);
 
-    let parse_results: Vec<anyhow::Result<Option<FileAnalysis>>> = files_to_index
+    let parse_results: Vec<anyhow::Result<Option<FileAnalysis>>> = files_to_parse
         .par_iter()
         .map(|file_info| {
             let source = std::fs::read(&file_info.path)?;
@@ -177,11 +183,11 @@ pub fn run(args: IndexArgs) -> Result<()> {
             pb2.inc(1);
 
             match parse_result {
-                Ok((mut symbols, imports, calls)) => {
+                Ok((mut symbols, imports, calls, flows)) => {
                     for sym in &mut symbols {
                         sym.file_path = rel_path.clone();
                     }
-                    Ok(Some(FileAnalysis { file_path: rel_path, symbols, imports, calls }))
+                    Ok(Some(FileAnalysis { file_path: rel_path, symbols, imports, calls, flows }))
                 }
                 Err(e) => {
                     parse_failures.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -202,7 +208,7 @@ pub fn run(args: IndexArgs) -> Result<()> {
         }
     }
 
-    let all_symbols: Vec<_> = analyses.iter().flat_map(|a| a.symbols.iter().cloned()).collect();
+    let mut all_symbols: Vec<_> = analyses.iter().flat_map(|a| a.symbols.iter().cloned()).collect();
     let files_parsed = analyses.len();
 
     println!(
@@ -215,9 +221,18 @@ pub fn run(args: IndexArgs) -> Result<()> {
     // Phase 6: Resolve relationships (imports, calls, inheritance)
     let phase_start = Instant::now();
     let pb = create_spinner("Resolving relationships...");
-    let relationships = analyzer::resolve_relationships(&analyses);
+    let (relationships, external_symbols) = analyzer::resolve_relationships(&analyses);
     pb.finish_with_message(format!("Resolved {} relationships", relationships.len()));
     let resolve_duration = phase_start.elapsed();
+
+    // Merge external pseudo-symbols (sorted by UID for determinism)
+    if !external_symbols.is_empty() {
+        eprintln!("  {} external pseudo-symbols collected", external_symbols.len());
+        all_symbols.extend(external_symbols);
+    }
+
+    // Resolve data flows: map each RawFlow to its enclosing function UID
+    let resolved_flows = resolve_data_flows(&analyses, &all_symbols);
 
     // Free analyses — no longer needed after relationship resolution
     drop(analyses);
@@ -272,10 +287,11 @@ pub fn run(args: IndexArgs) -> Result<()> {
     // Phase 9: Store in database
     let phase_start = Instant::now();
     let pb = create_spinner("Storing...");
-    db.store_symbols(&all_symbols, &files_to_index, &path)?;
+    db.store_symbols(&all_symbols, &files_to_store, &path)?;
     db.store_relationships(&relationships)?;
     db.store_communities(&communities)?;
     db.store_processes(&processes)?;
+    db.store_data_flows(&resolved_flows)?;
     pb.finish_with_message("Stored");
     let store_duration = phase_start.elapsed();
 
@@ -358,4 +374,53 @@ fn create_progress_bar(len: u64, prefix: &str) -> ProgressBar {
     );
     pb.set_prefix(prefix.to_string());
     pb
+}
+
+/// Resolve raw data flows to ResolvedFlow by finding the enclosing function UID.
+fn resolve_data_flows(
+    analyses: &[analyzer::FileAnalysis],
+    all_symbols: &[crate::parser::Symbol],
+) -> Vec<crate::storage::write::ResolvedFlow> {
+    let mut resolved = Vec::new();
+
+    for analysis in analyses {
+        for flow in &analysis.flows {
+            let function_uid = resolve_function_uid(flow, &analysis.file_path, all_symbols);
+            resolved.push(crate::storage::write::ResolvedFlow {
+                function_uid,
+                source_expr: flow.source_expr.clone(),
+                sink_expr: flow.sink_expr.clone(),
+                flow_kind: flow.flow_kind.to_string(),
+                source_line: flow.source_line,
+                sink_line: flow.sink_line,
+            });
+        }
+    }
+
+    resolved
+}
+
+/// Find the UID of the function that encloses a data flow.
+fn resolve_function_uid(
+    flow: &crate::parser::dataflow::RawFlow,
+    file_path: &str,
+    all_symbols: &[crate::parser::Symbol],
+) -> Option<String> {
+    let target_name = flow.enclosing_function.as_deref()?;
+    let candidates: Vec<_> = all_symbols.iter()
+        .filter(|s| s.name == target_name
+            && s.parent_name == flow.enclosing_parent
+            && s.file_path == file_path)
+        .collect();
+
+    match candidates.len() {
+        0 => None,
+        1 => Some(candidates[0].uid()),
+        _ => {
+            // Multiple candidates → use enclosing_start_line to disambiguate
+            candidates.iter()
+                .find(|s| s.start_line <= flow.source_line && flow.source_line <= s.end_line)
+                .map(|s| s.uid())
+        }
+    }
 }

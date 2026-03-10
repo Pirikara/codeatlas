@@ -29,6 +29,7 @@ impl Ord for FloatOrd {
 pub const VALID_SYMBOL_KINDS: &[&str] = &[
     "Function", "Method", "Class", "Interface", "Type", "Enum",
     "Struct", "Field", "Property", "Variable", "Constant", "Constructor", "Module",
+    "External",
 ];
 
 #[derive(Debug, Serialize)]
@@ -1434,11 +1435,99 @@ impl<'a> QueryEngine<'a> {
 
         Ok(entries)
     }
+
+    /// Query data flows for a symbol (by name, optionally filtered by file or uid).
+    pub fn dataflow(
+        &self,
+        name: Option<&str>,
+        file: Option<&str>,
+        uid: Option<&str>,
+    ) -> Result<DataflowResult> {
+        // Resolve symbol
+        let (_sym_id, sym_info) = if let Some(uid_val) = uid {
+            self.find_symbol_by_uid(uid_val)?
+                .ok_or_else(|| anyhow::anyhow!("symbol not found for uid: {}", uid_val))?
+        } else {
+            let name_val = name.ok_or_else(|| anyhow::anyhow!("name or uid required"))?;
+            if let Some(file_val) = file {
+                self.symbol_by_name_file(name_val, file_val)?
+                    .ok_or_else(|| anyhow::anyhow!("symbol '{}' not found in file '{}'", name_val, file_val))?
+            } else {
+                let candidates = self.find_symbols_by_name(name_val, 10)?;
+                if candidates.is_empty() {
+                    anyhow::bail!("symbol not found: {}", name_val);
+                }
+                if candidates.len() > 1 {
+                    // Try to find function/method specifically
+                    let funcs: Vec<_> = candidates.iter()
+                        .filter(|s| s.kind == "Function" || s.kind == "Method")
+                        .collect();
+                    if funcs.len() == 1 {
+                        let id = self.get_symbol_id_by_uid(&funcs[0].uid)?;
+                        (id, funcs[0].clone())
+                    } else {
+                        anyhow::bail!(
+                            "ambiguous symbol '{}' ({} matches). Use --file or --uid to disambiguate.",
+                            name_val, candidates.len()
+                        );
+                    }
+                } else {
+                    let id = self.get_symbol_id_by_uid(&candidates[0].uid)?;
+                    (id, candidates[0].clone())
+                }
+            }
+        };
+
+        // Query data flows by function UID
+        let function_uid = sym_info.uid.clone();
+        let mut stmt = self.conn.prepare(
+            "SELECT source_expr, sink_expr, flow_kind, source_line, sink_line
+             FROM data_flows WHERE function_uid = ?1 ORDER BY source_line",
+        )?;
+        let flows = stmt.query_map(params![function_uid], |row| {
+            Ok(DataflowEntry {
+                source_expr: row.get(0)?,
+                sink_expr: row.get(1)?,
+                flow_kind: row.get(2)?,
+                source_line: row.get(3)?,
+                sink_line: row.get(4)?,
+            })
+        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+
+        Ok(DataflowResult {
+            symbol: sym_info,
+            flows,
+        })
+    }
+
+    fn get_symbol_id_by_uid(&self, uid: &str) -> Result<i64> {
+        let id = self.conn.query_row(
+            "SELECT id FROM symbols WHERE uid = ?1",
+            params![uid],
+            |row| row.get(0),
+        )?;
+        Ok(id)
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct DataflowEntry {
+    pub source_expr: String,
+    pub sink_expr: String,
+    pub flow_kind: String,
+    pub source_line: i64,
+    pub sink_line: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DataflowResult {
+    pub symbol: SymbolInfo,
+    pub flows: Vec<DataflowEntry>,
 }
 
 // ─── Free functions ──────────────────────────────────────────────────
 
-const VALID_EDGE_KINDS: &[&str] = &["CALLS", "IMPORTS", "EXTENDS", "IMPLEMENTS", "DEFINES", "CONTAINS"];
+const VALID_EDGE_KINDS: &[&str] = &["CALLS", "CALLS_UNRESOLVED", "CALLS_EXTERNAL", "IMPORTS", "EXTENDS", "IMPLEMENTS", "DEFINES", "CONTAINS"];
 
 fn validate_edge_types(types: &[String]) -> Result<Vec<String>> {
     for t in types {

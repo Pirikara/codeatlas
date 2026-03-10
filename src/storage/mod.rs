@@ -2,7 +2,7 @@ pub mod write;
 mod read;
 
 #[allow(unused_imports)]
-pub use read::{CommunityInfo, ProcessInfo, ProcessStepInfo};
+pub use read::{CommunityInfo, DataFlowInfo, ProcessInfo, ProcessStepInfo};
 
 use anyhow::Result;
 use rusqlite::Connection;
@@ -118,6 +118,17 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_rel_source ON relationships(source_id);
             CREATE INDEX IF NOT EXISTS idx_rel_target ON relationships(target_id);
             CREATE INDEX IF NOT EXISTS idx_rel_kind ON relationships(kind);
+
+            CREATE TABLE IF NOT EXISTS data_flows (
+                id              INTEGER PRIMARY KEY,
+                function_uid    TEXT,
+                source_expr     TEXT NOT NULL,
+                sink_expr       TEXT NOT NULL,
+                flow_kind       TEXT NOT NULL,
+                source_line     INTEGER,
+                sink_line       INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_df_function ON data_flows(function_uid);
 
             CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
                 name, file_path, kind, parent_name,

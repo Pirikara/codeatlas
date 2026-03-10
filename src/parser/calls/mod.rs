@@ -34,11 +34,19 @@ pub fn extract_calls(language: Language, tree: &Tree, source: &[u8]) -> Vec<RawC
     calls
 }
 
-/// Walk up the AST to find the enclosing function/method name and its parent class.
+/// Walk up the AST to find the enclosing function/method name, its parent class,
+/// and the start line of the enclosing function (1-based).
 pub(super) fn find_enclosing_function(node: &Node, source: &[u8]) -> (Option<String>, Option<String>) {
+    let (name, parent, _) = find_enclosing_function_with_line(node, source);
+    (name, parent)
+}
+
+/// Like find_enclosing_function but also returns the start line (1-based) of the function node.
+pub(super) fn find_enclosing_function_with_line(node: &Node, source: &[u8]) -> (Option<String>, Option<String>, usize) {
     let mut current = node.parent();
     let mut func_name = None;
     let mut class_name = None;
+    let mut func_start_line = 0usize;
 
     while let Some(parent) = current {
         match parent.kind() {
@@ -49,6 +57,7 @@ pub(super) fn find_enclosing_function(node: &Node, source: &[u8]) -> (Option<Str
                     func_name = parent
                         .child_by_field_name("name")
                         .map(|n| node_text(&n, source));
+                    func_start_line = parent.start_position().row + 1;
                 }
             }
             // Arrow functions / anonymous — use variable name if assigned
@@ -60,6 +69,7 @@ pub(super) fn find_enclosing_function(node: &Node, source: &[u8]) -> (Option<Str
                             func_name = gp
                                 .child_by_field_name("name")
                                 .map(|n| node_text(&n, source));
+                            func_start_line = parent.start_position().row + 1;
                         }
                     }
                 }
@@ -77,7 +87,7 @@ pub(super) fn find_enclosing_function(node: &Node, source: &[u8]) -> (Option<Str
         current = parent.parent();
     }
 
-    (func_name, class_name)
+    (func_name, class_name, func_start_line)
 }
 
 pub(super) fn node_text(node: &Node, source: &[u8]) -> String {

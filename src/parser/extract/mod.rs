@@ -18,6 +18,7 @@ pub enum SymbolKind {
     Type,
     Property,
     Constructor,
+    External,
 }
 
 impl std::fmt::Display for SymbolKind {
@@ -34,6 +35,7 @@ impl std::fmt::Display for SymbolKind {
             SymbolKind::Type => write!(f, "Type"),
             SymbolKind::Property => write!(f, "Property"),
             SymbolKind::Constructor => write!(f, "Constructor"),
+            SymbolKind::External => write!(f, "External"),
         }
     }
 }

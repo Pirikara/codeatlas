@@ -38,6 +38,9 @@ impl Database {
     ) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
 
+        // External pseudo-symbols are rebuilt from scratch each index run
+        tx.execute("DELETE FROM symbols WHERE kind = 'External'", [])?;
+
         // Delete old symbols for files being re-indexed (CASCADE deletes relationships)
         for file in files {
             tx.execute(
@@ -289,4 +292,43 @@ impl Database {
         tx.commit()?;
         Ok(())
     }
+
+    /// Store data flow records.
+    pub fn store_data_flows(&self, flows: &[ResolvedFlow]) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+
+        // Clear existing data flows (rebuilt from scratch)
+        tx.execute("DELETE FROM data_flows", [])?;
+
+        let mut insert = tx.prepare(
+            "INSERT INTO data_flows (function_uid, source_expr, sink_expr, flow_kind, source_line, sink_line)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )?;
+
+        for flow in flows {
+            insert.execute(params![
+                flow.function_uid,
+                flow.source_expr,
+                flow.sink_expr,
+                flow.flow_kind,
+                flow.source_line as i64,
+                flow.sink_line as i64,
+            ])?;
+        }
+        drop(insert);
+
+        tx.commit()?;
+        eprintln!("  Stored {} data flows", flows.len());
+        Ok(())
+    }
+}
+
+/// A resolved data flow with function UID determined.
+pub struct ResolvedFlow {
+    pub function_uid: Option<String>,
+    pub source_expr: String,
+    pub sink_expr: String,
+    pub flow_kind: String,
+    pub source_line: usize,
+    pub sink_line: usize,
 }

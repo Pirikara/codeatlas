@@ -144,7 +144,9 @@ Schema (src/storage/mod.rs):
 - symbols(id, uid, name, kind, file_path, start_line, end_line, is_exported, parent_name)
   kinds: Function, Method, Class, Interface, Struct, Variable, Constant, Type, Enum, File, Module
 - relationships(id, source_id, target_id, kind, confidence, reason)
-  kinds: CALLS, IMPORTS, EXTENDS, IMPLEMENTS, DEFINES, CONTAINS
+  kinds: CALLS, CALLS_UNRESOLVED, CALLS_EXTERNAL, IMPORTS, EXTENDS, IMPLEMENTS, DEFINES, CONTAINS
+- data_flows(id, function_uid, source_expr, sink_expr, flow_kind, source_line, sink_line)
+  flow_kinds: Assignment, Argument, StringInterp, Return, FieldAccess
 - communities(id, label, cohesion, symbol_count)
 - community_members(community_id, symbol_id)
 - processes(id, label, process_type, priority, step_count)
@@ -163,6 +165,21 @@ Examples:
         limit: { type: 'number', description: 'Max rows (default 200)', default: 200 },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'dataflow',
+    description:
+      'Show intra-function data flows for a symbol. Returns assignment, argument passing, string interpolation, return, and field access flows within the function body.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Function/method name to inspect' },
+        uid:  { type: 'string', description: 'Symbol UID for zero-ambiguity lookup (alternative to name)' },
+        file: { type: 'string', description: 'File path to disambiguate same-name functions' },
+        repo: { type: 'string', description: 'Repository name or absolute path. Omit if only one repo is indexed. Use list_repos to see available names.' },
+      },
+      required: [],
     },
   },
   {
@@ -261,6 +278,10 @@ export async function callTool(name: string, args: Record<string, any>): Promise
       result = await codeatlas.graphQuery(repoPath, args.query, args.limit);
       break;
     }
+    case 'dataflow':
+      if (!args.name && !args.uid) throw new Error('dataflow requires either name or uid');
+      result = await codeatlas.dataflow(repoPath, args.name, args.uid, args.file);
+      break;
     case 'impact-batch':
       result = await codeatlas.impactBatch(
         repoPath, { symbols: args.symbols, ranges: args.ranges },

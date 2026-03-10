@@ -30,6 +30,17 @@ pub struct ProcessStepInfo {
     pub step_index: usize,
 }
 
+#[derive(Debug, serde::Serialize)]
+pub struct DataFlowInfo {
+    pub id: i64,
+    pub function_uid: Option<String>,
+    pub source_expr: String,
+    pub sink_expr: String,
+    pub flow_kind: String,
+    pub source_line: i64,
+    pub sink_line: i64,
+}
+
 impl Database {
     /// Get symbols that need embeddings (new or stale due to hash/model/dims change).
     /// Returns (symbol_id, name, kind, file_path, parent_name, file_content_hash).
@@ -174,6 +185,27 @@ impl Database {
             comm.top_symbols = members;
         }
         Ok(communities)
+    }
+
+    /// Get data flows for a given function UID.
+    #[allow(dead_code)]
+    pub fn get_data_flows_by_function(&self, function_uid: &str) -> Result<Vec<DataFlowInfo>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, function_uid, source_expr, sink_expr, flow_kind, source_line, sink_line
+             FROM data_flows WHERE function_uid = ?1 ORDER BY source_line",
+        )?;
+        let rows = stmt.query_map(params![function_uid], |row| {
+            Ok(DataFlowInfo {
+                id: row.get(0)?,
+                function_uid: row.get(1)?,
+                source_expr: row.get(2)?,
+                sink_expr: row.get(3)?,
+                flow_kind: row.get(4)?,
+                source_line: row.get(5)?,
+                sink_line: row.get(6)?,
+            })
+        })?.collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows)
     }
 
     /// List all processes with their steps.

@@ -1,5 +1,6 @@
 pub mod clusters_cmd;
 pub mod context_cmd;
+pub mod dataflow_cmd;
 pub mod embed_cmd;
 pub mod eval_cmd;
 pub mod graph_query_cmd;
@@ -65,6 +66,8 @@ pub enum Command {
     ImpactBatch(ImpactBatchArgs),
     /// Execute a read-only SQL SELECT query against the knowledge graph
     GraphQuery(GraphQueryArgs),
+    /// Show data flows within a function
+    Dataflow(DataflowArgs),
 }
 
 #[derive(clap::Args)]
@@ -301,6 +304,24 @@ pub struct ImpactBatchArgs {
     /// Include all symbol kinds regardless of --kinds
     #[arg(long)]
     pub all_kinds: bool,
+}
+
+#[derive(clap::Args)]
+pub struct DataflowArgs {
+    /// Symbol name to inspect (required unless --uid is given)
+    pub name: Option<String>,
+
+    /// Direct UID lookup (zero-ambiguity); conflicts with positional name
+    #[arg(long, conflicts_with = "name")]
+    pub uid: Option<String>,
+
+    /// Narrow down by file path when the name is ambiguous
+    #[arg(long)]
+    pub file: Option<String>,
+
+    /// Path to the repository
+    #[arg(short, long, default_value = ".")]
+    pub path: std::path::PathBuf,
 }
 
 #[derive(clap::Args)]
