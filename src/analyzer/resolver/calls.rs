@@ -242,20 +242,22 @@ fn resolve_callee(
         }
     }
 
-    // Strategy 4: Global name match (exported symbols only)
-    if let Some(refs) = symbol_index.get(&call.callee_name) {
-        let exported: Vec<_> = refs.iter().filter(|r| r.is_exported).collect();
-        if exported.len() == 1 {
-            results.push(resolved!(
-                exported[0].uid.clone(),
-                0.80,
-                "unique-global-match".to_string()
-            ));
-        } else if exported.len() >= 2 && exported.len() <= 5 {
-            let confidence = 0.50 / exported.len() as f64;
-            for r in &exported {
-                results.push(resolved!(r.uid.clone(), confidence, "ambiguous-global-match".to_string()));
+    // Strategy 4: Global name match (exported symbols only, unqualified calls only)
+    // Skip when there is an explicit receiver (other than self/this/@): the receiver type
+    // is unknown at this point, so a global name match would likely bind to the wrong class.
+    let has_explicit_receiver = call.receiver.as_ref()
+        .map_or(false, |r| r != "self" && r != "this" && r != "@");
+    if !has_explicit_receiver {
+        if let Some(refs) = symbol_index.get(&call.callee_name) {
+            let exported: Vec<_> = refs.iter().filter(|r| r.is_exported).collect();
+            if exported.len() == 1 {
+                results.push(resolved!(
+                    exported[0].uid.clone(),
+                    0.80,
+                    "unique-global-match".to_string()
+                ));
             }
+            // Ambiguous matches (2+ candidates) fall through to Strategy 5/6 → CALLS_UNRESOLVED.
         }
     }
 
