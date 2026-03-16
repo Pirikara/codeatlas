@@ -3,7 +3,7 @@ use rusqlite::params;
 use std::path::Path;
 
 use crate::analyzer::{Community, Process, Relationship};
-use crate::parser::Symbol;
+use crate::parser::{Symbol, SymbolKind};
 use crate::scanner::FileInfo;
 
 use super::{chrono_now, Database, OptionalExt};
@@ -38,10 +38,16 @@ impl Database {
     ) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
 
+        // Clear all symbol-dependent tables first to avoid expensive CASCADE lookups
+        // when deleting symbols. All of these are rebuilt from scratch after store_symbols.
+        tx.execute("DELETE FROM relationships", [])?;
+        tx.execute("DELETE FROM community_members", [])?;
+        tx.execute("DELETE FROM process_steps", [])?;
+
         // External pseudo-symbols are rebuilt from scratch each index run
         tx.execute("DELETE FROM symbols WHERE kind = 'External'", [])?;
 
-        // Delete old symbols for files being re-indexed (CASCADE deletes relationships)
+        // Delete old symbols for files being re-indexed
         for file in files {
             tx.execute(
                 "DELETE FROM symbols WHERE file_path = ?1",
@@ -49,13 +55,16 @@ impl Database {
             )?;
         }
 
-        // Insert new symbols
+        // Insert new symbols in two passes:
+        //   Pass 1: non-External symbols (real code symbols + File/Folder nodes)
+        //   FTS rebuild (only real symbols — External pseudo-symbols are noisy tokens)
+        //   Pass 2: External pseudo-symbols (after FTS rebuild, so excluded from search)
         let mut insert_sym = tx.prepare(
             "INSERT OR IGNORE INTO symbols (uid, name, kind, file_path, start_line, end_line, is_exported, parent_name, content_hash)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
         )?;
 
-        for sym in symbols {
+        for sym in symbols.iter().filter(|s| s.kind != SymbolKind::External) {
             insert_sym.execute(params![
                 sym.uid(),
                 sym.name,
@@ -132,8 +141,28 @@ impl Database {
         }
         drop(insert_file);
 
-        // Rebuild FTS index
+        // Rebuild FTS index (only non-External symbols are in the table at this point)
         tx.execute("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild')", [])?;
+
+        // Pass 2: insert External pseudo-symbols after FTS rebuild (excluded from search)
+        let mut insert_ext = tx.prepare(
+            "INSERT OR IGNORE INTO symbols (uid, name, kind, file_path, start_line, end_line, is_exported, parent_name, content_hash)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
+        )?;
+        for sym in symbols.iter().filter(|s| s.kind == SymbolKind::External) {
+            insert_ext.execute(params![
+                sym.uid(),
+                sym.name,
+                sym.kind.to_string(),
+                sym.file_path,
+                sym.start_line as i64,
+                sym.end_line as i64,
+                sym.is_exported,
+                sym.parent_name,
+                0i64,
+            ])?;
+        }
+        drop(insert_ext);
 
         tx.commit()?;
         Ok(())
@@ -186,6 +215,8 @@ impl Database {
             tx.execute("DELETE FROM symbols WHERE file_path = ?1", params![path])?;
             tx.execute("DELETE FROM file_index WHERE path = ?1", params![path])?;
         }
+        // Remove External pseudo-symbols before FTS rebuild so they don't pollute the index
+        tx.execute("DELETE FROM symbols WHERE kind = 'External'", [])?;
         tx.execute("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild')", [])?;
         tx.commit()?;
         Ok(stale_paths.len())
