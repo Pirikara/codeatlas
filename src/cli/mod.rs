@@ -83,6 +83,10 @@ pub struct IndexArgs {
     /// Print per-phase timing, failure counts, and memory usage to stderr
     #[arg(long)]
     pub metrics: bool,
+
+    /// Exclude test files and directories (spec/, test/, *_spec.rb, *_test.go, *.test.ts, etc.)
+    #[arg(long)]
+    pub exclude_tests: bool,
 }
 
 #[derive(clap::Args)]

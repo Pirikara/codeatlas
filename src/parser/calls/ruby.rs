@@ -14,7 +14,8 @@ pub(super) fn extract_ruby_calls(node: &Node, source: &[u8], calls: &mut Vec<Raw
                 .map(|n| node_text(&n, source));
             let receiver = child
                 .child_by_field_name("receiver")
-                .map(|n| node_text(&n, source));
+                .map(|n| node_text(&n, source))
+                .filter(|r| !r.contains('\n') && r.len() <= 80);
 
             if let Some(name) = method {
                 // Skip require/require_relative (already handled as imports)

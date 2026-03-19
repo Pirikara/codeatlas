@@ -93,7 +93,7 @@ pub fn run(args: IndexArgs) -> Result<()> {
     // Phase 1: Scan files
     let phase_start = Instant::now();
     let pb = create_spinner("Scanning files...");
-    let scan_result = scanner::scan(&path)?;
+    let scan_result = scanner::scan(&path, args.exclude_tests)?;
     pb.finish_with_message(format!("Found {} files", scan_result.files.len()));
     let scan_duration = phase_start.elapsed();
 

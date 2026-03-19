@@ -310,6 +310,7 @@ impl<'a> QueryEngine<'a> {
              FROM symbols_fts fts
              JOIN symbols s ON s.id = fts.rowid
              WHERE symbols_fts MATCH ?1
+               AND s.kind NOT IN ('File', 'Folder', 'External')
              ORDER BY rank, s.id ASC
              LIMIT ?2",
         )?;
@@ -600,6 +601,7 @@ impl<'a> QueryEngine<'a> {
              FROM symbols_fts fts
              JOIN symbols s ON s.id = fts.rowid
              WHERE symbols_fts MATCH ?1
+               AND s.kind NOT IN ('File', 'Folder', 'External')
              ORDER BY rank, s.id ASC
              LIMIT ?2",
         )?;

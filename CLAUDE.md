@@ -23,9 +23,9 @@ npm run build
 cargo test -- --test-threads=1
 ```
 
-As of 2026-03-10:
+As of 2026-03-19:
 - Unit tests: 74 passed
-- Integration tests: 63 passed
+- Integration tests: 66 passed
 
 ## Current Directory Layout (Key Parts)
 
@@ -90,6 +90,11 @@ codeatlas-mcp/
 - Deletion cleanup also runs with `--force`
 - If deletions are detected, all files are re-parsed to keep communities/processes consistent
 - `index --metrics` prints phase timings, parse failures, counts, and RSS
+- `index --exclude-tests` skips test directories (`spec/`, `test/`, `__tests__/`) and test files (`*_spec.rb`, `*_test.go`, `*.test.ts`, etc.)
+
+### Search Quality
+- BM25 / vector / hybrid search excludes `File`, `Folder`, and `External` kind symbols from results
+- Ruby receiver expressions longer than 80 chars or containing newlines are dropped (block/hash literal noise filter)
 
 ### Impact
 - Default: traverse all relationship types

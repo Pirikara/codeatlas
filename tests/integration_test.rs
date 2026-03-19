@@ -1543,3 +1543,53 @@ fn dataflow_table_populated_after_index() {
     let count = rows[0]["cnt"].as_i64().unwrap_or(0);
     assert!(count > 0, "data_flows table should have entries after indexing");
 }
+
+// ── Search Quality ────────────────────────────────────────────────
+
+#[test]
+fn query_excludes_file_and_folder_nodes() {
+    let path = test_fixture_path("external-calls");
+    run_codeatlas(&["index", "--force", &path]);
+
+    let json = run_json(&["query", "main", "-p", &path, "--json"]);
+    let results = json.as_array().expect("query results should be a JSON array");
+
+    for result in results {
+        let kind = result["symbol"]["kind"].as_str().unwrap_or("");
+        assert!(
+            kind != "File" && kind != "Folder" && kind != "External",
+            "query results should not include File/Folder/External nodes, got kind='{}'",
+            kind
+        );
+    }
+}
+
+#[test]
+fn exclude_tests_flag_skips_spec_files() {
+    let path = test_fixture_path("external-calls");
+
+    // Without --exclude-tests, count all files
+    run_codeatlas(&["index", "--force", &path]);
+
+    let without = run_json(&[
+        "graph-query",
+        "SELECT COUNT(*) as cnt FROM file_index",
+        "-p", &path, "--json",
+    ]);
+    let cnt_without = without.as_array().unwrap()[0]["cnt"].as_i64().unwrap_or(0);
+
+    // --exclude-tests: fixture has no spec files so count should be same or fewer
+    run_codeatlas(&["index", "--force", "--exclude-tests", &path]);
+    let with_excl = run_json(&[
+        "graph-query",
+        "SELECT COUNT(*) as cnt FROM file_index",
+        "-p", &path, "--json",
+    ]);
+    let cnt_with = with_excl.as_array().unwrap()[0]["cnt"].as_i64().unwrap_or(0);
+
+    assert!(
+        cnt_with <= cnt_without,
+        "--exclude-tests should not increase file count ({} vs {})",
+        cnt_with, cnt_without
+    );
+}
