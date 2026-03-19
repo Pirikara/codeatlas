@@ -49,6 +49,14 @@ pub fn detect_communities(
         .map(|&n| (n, adj.get(n).map_or(0, |v| v.len()) as f64))
         .collect();
 
+    // comm_totals[c] = sum of degrees of all nodes in community c.
+    // Computed once here and updated incrementally on each node move — O(N) total
+    // instead of O(N) per node per iteration (was the O(N²) bottleneck).
+    let mut comm_totals: HashMap<usize, f64> = HashMap::new();
+    for (&n, &comm) in &community_of {
+        *comm_totals.entry(comm).or_default() += degree[n];
+    }
+
     // Louvain phase 1: repeatedly move nodes to maximize modularity
     let mut improved = true;
     let mut iterations = 0;
@@ -67,12 +75,6 @@ pub fn detect_communities(
                     let nbr_comm = community_of[nbr];
                     *comm_edges.entry(nbr_comm).or_default() += 1.0;
                 }
-            }
-
-            // Calculate community totals (sum of degrees)
-            let mut comm_totals: HashMap<usize, f64> = HashMap::new();
-            for (&n, &comm) in &community_of {
-                *comm_totals.entry(comm).or_default() += degree[n];
             }
 
             // Find best community to move to
@@ -102,6 +104,9 @@ pub fn detect_communities(
             }
 
             if best_comm != current_comm {
+                // Update comm_totals incrementally — O(1) per move
+                *comm_totals.get_mut(&current_comm).unwrap() -= node_deg;
+                *comm_totals.entry(best_comm).or_default() += node_deg;
                 community_of.insert(node, best_comm);
                 improved = true;
             }
@@ -116,6 +121,14 @@ pub fn detect_communities(
             .or_default()
             .push(node.to_string());
     }
+
+    // Build a directed edge set once for O(1) cohesion lookup.
+    // Previously cohesion iterated over all edges for each community: O(communities × |edges|).
+    // Now it's O(|edges|) setup + O(members²) per community.
+    let edge_set: HashSet<(&str, &str)> = edges
+        .iter()
+        .map(|(s, t)| (s.as_str(), t.as_str()))
+        .collect();
 
     // Filter out singleton communities (just one node, not interesting)
     let mut communities: Vec<Community> = Vec::new();
@@ -132,12 +145,13 @@ pub fn detect_communities(
         // Sort members within each community for deterministic output
         members.sort();
 
-        // Calculate cohesion: internal edges / possible edges
-        let member_set: HashSet<&str> = members.iter().map(|s| s.as_str()).collect();
-        let mut internal_edges = 0;
-        for &(ref src, ref tgt) in edges {
-            if member_set.contains(src.as_str()) && member_set.contains(tgt.as_str()) {
-                internal_edges += 1;
+        // Calculate cohesion: internal directed edges / possible undirected pairs
+        let mut internal_edges = 0usize;
+        for i in 0..members.len() {
+            for j in 0..members.len() {
+                if i != j && edge_set.contains(&(members[i].as_str(), members[j].as_str())) {
+                    internal_edges += 1;
+                }
             }
         }
         let possible = members.len() * (members.len() - 1) / 2;
