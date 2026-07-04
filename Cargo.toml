@@ -12,7 +12,7 @@ clap = { version = "4", features = ["derive"] }
 # Tree-sitter
 tree-sitter = "0.24"
 tree-sitter-ruby = "0.23"
-tree-sitter-go = "0.23"
+tree-sitter-go = "0.25.0"
 tree-sitter-typescript = "0.23"
 
 # Storage
