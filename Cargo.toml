@@ -35,7 +35,7 @@ rayon = "1"
 libc = "0.2"
 
 # Utilities
-anyhow = "1"
+anyhow = "1.0.103"
 walkdir = "2"
 chrono = { version = "0.4", features = ["now"] }
 dirs = "5"
