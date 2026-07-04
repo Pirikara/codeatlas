@@ -1,0 +1,23 @@
+# Automated dependency updates via Converge (https://github.com/Pirikara/Converge)
+name: Converge
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # daily 07:00 UTC (routine gated by converge.json)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  converge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable # cargo resolution (Cargo.toml/lock)
+      - uses: Pirikara/Converge@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          apply: "true"
+          types: "minor,patch"
+          limit: "10"
