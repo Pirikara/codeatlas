@@ -16,7 +16,7 @@ tree-sitter-go = "0.23"
 tree-sitter-typescript = "0.23"
 
 # Storage
-rusqlite = { version = "0.32", features = ["bundled", "vtab"] }
+rusqlite = { version = "0.40.1", features = ["bundled", "vtab"] }
 
 # Hashing
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
