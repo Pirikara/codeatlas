@@ -1,7 +1,5 @@
 {
-  "schedule": { "days": ["mon"] },
+  "schedule": {},
   "lockRefresh": { "enabled": true },
-  "ecosystems": {
-    "gomod": { "enabled": false }
-  }
+  "ecosystems": { "gomod": { "enabled": false } }
 }
