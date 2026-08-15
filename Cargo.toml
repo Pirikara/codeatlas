@@ -2,6 +2,7 @@
 name = "codeatlas"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.87"
 description = "Code knowledge graph builder — analyzes source code and builds a knowledge graph of symbols and their relationships"
 license = "MIT"
 
